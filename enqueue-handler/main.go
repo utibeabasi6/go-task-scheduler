@@ -37,8 +37,8 @@ func main() {
 		decoder := json.NewDecoder(r.Body)
 		err = decoder.Decode(&jobObj)
 		if err != nil {
-			errMessage := "Unable to encode json"
-			handleErrors(w, errMessage, http.StatusInternalServerError, err)
+			errMessage := fmt.Sprintf("Unable to encode json. %v", err)
+			handleErrors(w, errMessage, http.StatusInternalServerError)
 			return
 		}
 		if jobObj.Payload == "" || jobObj.Type == "" {
@@ -59,15 +59,16 @@ func main() {
 		// Deduplication logic
 		encoded, err := json.Marshal(jobObj)
 		if err != nil {
-			errMessage := "Unable to encode json"
-			handleErrors(w, errMessage, http.StatusInternalServerError, err)
+			errMessage := fmt.Sprintf("Unable to encode json. %v", err)
+			handleErrors(w, errMessage, http.StatusInternalServerError)
 			return
 		}
-		// check if object is in "type" queue
-		elementPos := rdb.LPos(context.TODO(), jobObj.Type, string(encoded), redis.LPosArgs{})
+
+		// check if object is in "queue" queue
+		elementPos := rdb.LPos(context.TODO(), "queue", string(encoded), redis.LPosArgs{})
 		if err := elementPos.Err(); err == nil {
 			errMessage := fmt.Sprintf("Unable to add to queue. Object already exists. %v", err)
-			handleErrors(w, errMessage, http.StatusBadRequest, err)
+			handleErrors(w, errMessage, http.StatusBadRequest)
 			return
 		}
 
@@ -75,7 +76,7 @@ func main() {
 		elementPos = rdb.LPos(context.TODO(), "processing", string(encoded), redis.LPosArgs{})
 		if err := elementPos.Err(); err == nil {
 			errMessage := fmt.Sprintf("Unable to add to queue. Object being processed. %v", err)
-			handleErrors(w, errMessage, http.StatusInternalServerError, err)
+			handleErrors(w, errMessage, http.StatusBadRequest)
 			return
 		}
 
@@ -83,7 +84,7 @@ func main() {
 		cmd := rdb.LPush(context.TODO(), "queue", encoded)
 		if err := cmd.Err(); err != nil {
 			errMessage := fmt.Sprintf("An error occured while pushing job %s to queue: %v", jobObj.Id, err)
-			handleErrors(w, errMessage, http.StatusInternalServerError, err)
+			handleErrors(w, errMessage, http.StatusInternalServerError)
 			return
 		}
 

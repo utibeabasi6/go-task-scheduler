@@ -44,6 +44,7 @@ func main() {
 
 	})
 
+	log.Println("Starting worker...")
 	for {
 		data := rdb.LMove(context.TODO(), "queue", "processing", "LEFT", "RIGHT")
 		val, err := data.Result()
