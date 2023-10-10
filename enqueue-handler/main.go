@@ -51,7 +51,7 @@ func main() {
 		jobObj.Id = hash(jobObj.Type, jobObj.Payload)
 
 		rdb := redis.NewClient(&redis.Options{
-			Addr:     config.Redis.hosts[jobObj.Type],
+			Addr:     config.Redis.Url,
 			Password: "", // no password set
 			DB:       0,  // use default DB
 		})
