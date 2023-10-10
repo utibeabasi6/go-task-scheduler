@@ -1,6 +1,6 @@
 {
     "port": 3000,
     "redisConfig": {
-        "type": "localhost:6379"
+        "url": "localhost:6379"
     }
 }

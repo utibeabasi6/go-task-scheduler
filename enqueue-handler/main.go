@@ -57,36 +57,29 @@ func main() {
 		})
 
 		// Deduplication logic
-		elementRequest := rdb.LRange(context.TODO(), jobObj.Type, 0, -1)
-		elements, err := elementRequest.Result()
-		if err != nil {
-			errMessage := "Unable to fetch objects from redis"
-			handleErrors(w, errMessage, http.StatusInternalServerError, err)
-			return
-		}
-		var deduplicatedObj Job
-		for _, v := range elements {
-			err := json.Unmarshal([]byte(v), &deduplicatedObj)
-			if err != nil {
-				errMessage := "Unable to encode json"
-				handleErrors(w, errMessage, http.StatusInternalServerError, err)
-				return
-			}
-			if deduplicatedObj.Id == jobObj.Id {
-				message.Message = "Unable to add to queue. Object already exists"
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(message)
-				return
-			}
-		}
-
 		encoded, err := json.Marshal(jobObj)
 		if err != nil {
 			errMessage := "Unable to encode json"
 			handleErrors(w, errMessage, http.StatusInternalServerError, err)
 			return
 		}
+		// check if object is in "type" queue
+		elementPos := rdb.LPos(context.TODO(), jobObj.Type, string(encoded), redis.LPosArgs{})
+		if err := elementPos.Err(); err == nil {
+			errMessage := fmt.Sprintf("Unable to add to queue. Object already exists. %v", err)
+			handleErrors(w, errMessage, http.StatusBadRequest, err)
+			return
+		}
 
+		// check if object is in "processing" queue
+		elementPos = rdb.LPos(context.TODO(), "processing", string(encoded), redis.LPosArgs{})
+		if err := elementPos.Err(); err == nil {
+			errMessage := fmt.Sprintf("Unable to add to queue. Object being processed. %v", err)
+			handleErrors(w, errMessage, http.StatusInternalServerError, err)
+			return
+		}
+
+		// Push job to queue
 		cmd := rdb.LPush(context.TODO(), jobObj.Type, encoded)
 		if err := cmd.Err(); err != nil {
 			errMessage := fmt.Sprintf("An error occured while pushing job %s to queue: %v", jobObj.Id, err)
