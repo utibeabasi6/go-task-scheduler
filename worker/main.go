@@ -37,10 +37,6 @@ func main() {
 		log.Fatalln("Error while decoding config file", err)
 	}
 
-	workerType := os.Getenv("WORKER_TYPE")
-	if workerType == "" {
-		log.Fatalln("WORKER_TYPE env not set")
-	}
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     config.Redis.Url,
 		Password: "", // no password set
@@ -49,7 +45,7 @@ func main() {
 	})
 
 	for {
-		data := rdb.LMove(context.TODO(), workerType, "processing", "LEFT", "RIGHT")
+		data := rdb.LMove(context.TODO(), "queue", "processing", "LEFT", "RIGHT")
 		val, err := data.Result()
 		if err != nil {
 			continue

@@ -80,7 +80,7 @@ func main() {
 		}
 
 		// Push job to queue
-		cmd := rdb.LPush(context.TODO(), jobObj.Type, encoded)
+		cmd := rdb.LPush(context.TODO(), "queue", encoded)
 		if err := cmd.Err(); err != nil {
 			errMessage := fmt.Sprintf("An error occured while pushing job %s to queue: %v", jobObj.Id, err)
 			handleErrors(w, errMessage, http.StatusInternalServerError, err)
