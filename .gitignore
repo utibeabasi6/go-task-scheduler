@@ -1,0 +1,21 @@
+# Ignore Go binary files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Ignore Mac-specific files
+*.DS_Store
+
+# Ignore Go build artifacts
+/bin/
+/pkg/
+
+# Ignore Go generated files
+*.test
+*.prof
+
+# Ignore Go dependency files
+go.mod
+go.sum
