@@ -17,5 +17,4 @@
 *.prof
 
 # Ignore Go dependency files
-go.mod
 go.sum
