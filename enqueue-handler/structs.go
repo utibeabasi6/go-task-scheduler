@@ -17,3 +17,7 @@ type Job struct {
 type HttpResponse struct {
 	Message string `json:"message"`
 }
+
+type CustomError struct {
+	Error string `json:"error"`
+}

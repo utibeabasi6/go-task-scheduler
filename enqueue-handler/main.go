@@ -18,14 +18,14 @@ func main() {
 
 	file, err := os.Open("config.json")
 	if err != nil {
-		log.Fatalln("Error while opening file.", err)
+		log.Fatalln("Error while opening config file.", err)
 	}
 
 	var config Config
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&config)
 	if err != nil {
-		log.Fatalln("Error while opening file", err)
+		log.Fatalln("Error while decoding config file", err)
 	}
 
 	http.HandleFunc("/job", func(w http.ResponseWriter, r *http.Request) {
@@ -37,9 +37,8 @@ func main() {
 		decoder := json.NewDecoder(r.Body)
 		err = decoder.Decode(&jobObj)
 		if err != nil {
-			message.Message = "Unable to deserialize json"
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(message)
+			errMessage := "Unable to encode json"
+			handleErrors(w, errMessage, http.StatusInternalServerError, err)
 			return
 		}
 		if jobObj.Payload == "" || jobObj.Type == "" {
@@ -61,18 +60,16 @@ func main() {
 		elementRequest := rdb.LRange(context.TODO(), jobObj.Type, 0, -1)
 		elements, err := elementRequest.Result()
 		if err != nil {
-			message.Message = "Unable to fetch all objects from redis"
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(message)
+			errMessage := "Unable to fetch objects from redis"
+			handleErrors(w, errMessage, http.StatusInternalServerError, err)
 			return
 		}
 		var deduplicatedObj Job
 		for _, v := range elements {
 			err := json.Unmarshal([]byte(v), &deduplicatedObj)
 			if err != nil {
-				message.Message = "Unable to deserialize redis obj"
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(message)
+				errMessage := "Unable to encode json"
+				handleErrors(w, errMessage, http.StatusInternalServerError, err)
 				return
 			}
 			if deduplicatedObj.Id == jobObj.Id {
@@ -85,17 +82,15 @@ func main() {
 
 		encoded, err := json.Marshal(jobObj)
 		if err != nil {
-			message.Message = "Unable to encode json"
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(message)
+			errMessage := "Unable to encode json"
+			handleErrors(w, errMessage, http.StatusInternalServerError, err)
 			return
 		}
 
 		cmd := rdb.LPush(context.TODO(), jobObj.Type, encoded)
 		if err := cmd.Err(); err != nil {
-			message.Message = fmt.Sprintf("An error occured while pushing job %s to queue: %v", jobObj.Id, err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(message)
+			errMessage := fmt.Sprintf("An error occured while pushing job %s to queue: %v", jobObj.Id, err)
+			handleErrors(w, errMessage, http.StatusInternalServerError, err)
 			return
 		}
 
