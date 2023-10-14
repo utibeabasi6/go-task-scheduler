@@ -1,32 +1,47 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
+	"strings"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/IBM/sarama"
 )
 
+var (
+	VERSION = ""
+	TOPIC   = ""
+	PORT    = ""
+	BROKERS = ""
+)
+
+func init() {
+	flag.StringVar(&VERSION, "version", "0.11.0.0", "apache kafka version")
+	flag.StringVar(&TOPIC, "topic", "task", "the topic to send messages to")
+	flag.StringVar(&PORT, "port", "8000", "the port to start the server on")
+	flag.StringVar(&BROKERS, "brokers", "localhost:9092", "comma seperated list of brokers to connect to")
+
+	flag.Parse()
+}
+
 func main() {
-	if _, err := os.Stat("config.json"); err != nil {
-		log.Fatalln("Unable to locate config file", err)
-	}
+	var config Config = Config{Port: PORT, Kafka: KafkaConfig{Brokers: strings.Split(BROKERS, ",")}}
 
-	file, err := os.Open("config.json")
+	// Create kafka producer
+	producerConfg := sarama.NewConfig()
+	producerConfg.Producer.Return.Successes = true
+	producer, err := sarama.NewSyncProducer(config.Kafka.Brokers, producerConfg)
 	if err != nil {
-		log.Fatalln("Error while opening config file.", err)
+		log.Fatalln("Error while creating kafka producer.", err)
 	}
-
-	var config Config
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&config)
-	if err != nil {
-		log.Fatalln("Error while decoding config file", err)
-	}
+	defer func() {
+		if err := producer.Close(); err != nil {
+			log.Fatalln("Unable to close producer")
+		}
+	}()
 
 	http.HandleFunc("/job", func(w http.ResponseWriter, r *http.Request) {
 		var message HttpResponse
@@ -34,6 +49,7 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 
+		// Decode request body
 		decoder := json.NewDecoder(r.Body)
 		err = decoder.Decode(&jobObj)
 		if err != nil {
@@ -42,59 +58,72 @@ func main() {
 			return
 		}
 		if jobObj.Payload == "" || jobObj.Type == "" {
-			message.Message = "Unable to deserialize data, one of jobId, jobType or payload not set"
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(message)
+			errMessage := "Unable to deserialize data, one of jobId, jobType or payload not set"
+			handleErrors(w, errMessage, http.StatusBadRequest)
 			return
 		}
 
+		// Send job to kafka topic
 		jobObj.Id = hash(jobObj.Type, jobObj.Payload)
-
-		rdb := redis.NewClient(&redis.Options{
-			Addr:     config.Redis.Url,
-			Password: "", // no password set
-			DB:       0,  // use default DB
-		})
-
-		// Deduplication logic
-		encoded, err := json.Marshal(jobObj)
+		bytes, err := json.Marshal(jobObj)
 		if err != nil {
 			errMessage := fmt.Sprintf("Unable to encode json. %v", err)
 			handleErrors(w, errMessage, http.StatusInternalServerError)
 			return
 		}
-
-		// check if object is in "queue" queue
-		elementPos := rdb.LPos(context.TODO(), "queue", string(encoded), redis.LPosArgs{})
-		if err := elementPos.Err(); err == nil {
-			errMessage := fmt.Sprintf("Unable to add to queue. Object already exists. %v", err)
-			handleErrors(w, errMessage, http.StatusBadRequest)
-			return
-		}
-
-		// check if object is in "processing" queue
-		elementPos = rdb.LPos(context.TODO(), "processing", string(encoded), redis.LPosArgs{})
-		if err := elementPos.Err(); err == nil {
-			errMessage := fmt.Sprintf("Unable to add to queue. Object being processed. %v", err)
-			handleErrors(w, errMessage, http.StatusBadRequest)
-			return
-		}
-
-		// Push job to queue
-		cmd := rdb.LPush(context.TODO(), "queue", encoded)
-		if err := cmd.Err(); err != nil {
-			errMessage := fmt.Sprintf("An error occured while pushing job %s to queue: %v", jobObj.Id, err)
+		producerMessage := sarama.ProducerMessage{Topic: TOPIC, Value: sarama.StringEncoder(string(bytes))}
+		partition, offset, err := producer.SendMessage(&producerMessage)
+		if err != nil {
+			errMessage := fmt.Sprintf("Error sending job to kafka. %v", err)
 			handleErrors(w, errMessage, http.StatusInternalServerError)
 			return
 		}
 
-		message.Message = fmt.Sprintf("Job %s added to queue", jobObj.Id)
+		message.Message = fmt.Sprintf("Job %s added to kafka, partition: %d, offset: %d", jobObj.Id, partition, offset)
 		log.Println(message.Message)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(message)
+
+		// rdb := redis.NewClient(&redis.Options{
+		// 	Addr:     config.Redis.Url,
+		// 	Password: "", // no password set
+		// 	DB:       0,  // use default DB
+		// })
+
+		// Deduplication logic
+		// encoded, err := json.Marshal(jobObj)
+		// if err != nil {
+		// 	errMessage := fmt.Sprintf("Unable to encode json. %v", err)
+		// 	handleErrors(w, errMessage, http.StatusInternalServerError)
+		// 	return
+		// }
+
+		// check if object is in "queue" queue
+		// elementPos := rdb.LPos(context.TODO(), "queue", string(encoded), redis.LPosArgs{})
+		// if err := elementPos.Err(); err == nil {
+		// 	errMessage := fmt.Sprintf("Unable to add to queue. Object already exists. %v", err)
+		// 	handleErrors(w, errMessage, http.StatusBadRequest)
+		// 	return
+		// }
+
+		// check if object is in "processing" queue
+		// elementPos = rdb.LPos(context.TODO(), "processing", string(encoded), redis.LPosArgs{})
+		// if err := elementPos.Err(); err == nil {
+		// 	errMessage := fmt.Sprintf("Unable to add to queue. Object being processed. %v", err)
+		// 	handleErrors(w, errMessage, http.StatusBadRequest)
+		// 	return
+		// }
+
+		// Push job to redis
+		// cmd := rdb.LPush(context.TODO(), "queue", encoded)
+		// if err := cmd.Err(); err != nil {
+		// 	errMessage := fmt.Sprintf("An error occured while pushing job %s to queue: %v", jobObj.Id, err)
+		// 	handleErrors(w, errMessage, http.StatusInternalServerError)
+		// 	return
+		// }
 	})
 
-	port := os.Getenv("PORT")
+	port := config.Port
 	if port == "" {
 		port = fmt.Sprintf("%v", config.Port)
 	}

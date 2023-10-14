@@ -1,11 +1,11 @@
 package main
 
-type RedisConfig struct {
-	Url string `json:"url"`
+type KafkaConfig struct {
+	Brokers []string `json:"brokers"`
 }
 type Config struct {
-	Port  int         `json:"port"`
-	Redis RedisConfig `json:"redisConfig"`
+	Port  string      `json:"port"`
+	Kafka KafkaConfig `json:"kafkaConfig"`
 }
 
 type Job struct {
