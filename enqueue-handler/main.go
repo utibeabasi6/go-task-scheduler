@@ -53,6 +53,9 @@ func main() {
 		if err := producer.Close(); err != nil {
 			log.Fatalln("Unable to close producer")
 		}
+		if err := clusterAdmin.Close(); err != nil {
+			log.Fatalln("Unable to close cluster admin")
+		}
 	}()
 
 	http.HandleFunc("/job", func(w http.ResponseWriter, r *http.Request) {
