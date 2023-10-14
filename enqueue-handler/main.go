@@ -28,7 +28,7 @@ func init() {
 }
 
 func main() {
-	var config Config = Config{Port: PORT, Kafka: KafkaConfig{Brokers: strings.Split(BROKERS, ",")}}
+	var config Config = Config{Port: PORT, Kafka: KafkaConfig{Brokers: strings.Split(BROKERS, ","), Topic: TOPIC}}
 
 	// Create kafka producer
 	producerConfg := sarama.NewConfig()
@@ -36,6 +36,18 @@ func main() {
 	producer, err := sarama.NewSyncProducer(config.Kafka.Brokers, producerConfg)
 	if err != nil {
 		log.Fatalln("Error while creating kafka producer.", err)
+	}
+	clusterAdmin, err := sarama.NewClusterAdmin(config.Kafka.Brokers, producerConfg)
+	if err != nil {
+		log.Fatalln("Error while creating kafka cluster admin.", err)
+	}
+	numBrokers := len(config.Kafka.Brokers)
+	err = clusterAdmin.CreateTopic(config.Kafka.Topic, &sarama.TopicDetail{
+		ReplicationFactor: int16(numBrokers),
+		NumPartitions:     1,
+	}, false)
+	if err != nil {
+		log.Println(err)
 	}
 	defer func() {
 		if err := producer.Close(); err != nil {

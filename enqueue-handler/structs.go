@@ -2,6 +2,7 @@ package main
 
 type KafkaConfig struct {
 	Brokers []string `json:"brokers"`
+	Topic   string   `json:"topic"`
 }
 type Config struct {
 	Port  string      `json:"port"`
