@@ -1,4 +1,4 @@
-module github.com/utibeabasi6/go-task-scheduler/enqueue-handler
+module github.com/utibeabasi6/go-task-scheduler/kafkagate
 
 go 1.21.1
 
