@@ -15,7 +15,7 @@ var (
 )
 
 func init() {
-	flag.StringVar(&REDIS_URL, "version", "localhost:6379", "redis url")
+	flag.StringVar(&REDIS_URL, "redis-url", "localhost:6379", "redis url")
 	flag.StringVar(&TASK_QUEUE, "task-queue", "task_queue", "queue where tasks are sent")
 	flag.StringVar(&PROCESSING_QUEUE, "processing-queue", "processing_queue", "processing queue")
 	flag.Parse()

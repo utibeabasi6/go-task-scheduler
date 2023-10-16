@@ -11,14 +11,19 @@ type RedisConfig struct {
 	Url string `json:"url"`
 }
 
+type ConsulConfig struct {
+	Url string `json:"url"`
+}
+
 type KafkaConfig struct {
 	Brokers []string `json:"brokers"`
 	Topic   string   `json:"topic"`
 }
 type Config struct {
-	Port  string      `json:"port"`
-	Kafka KafkaConfig `json:"kafkaConfig"`
-	Redis RedisConfig `json:"redisConfig"`
+	Port   string       `json:"port"`
+	Kafka  KafkaConfig  `json:"kafkaConfig"`
+	Redis  RedisConfig  `json:"redisConfig"`
+	Consul ConsulConfig `json:"consulConfig"`
 }
 
 type Job struct {

@@ -1,0 +1,64 @@
+version: "3.8"
+
+services:
+  jqrelay:
+    build:
+      context: ./jqrelay
+      dockerfile: ../Dockerfile
+    command: 
+      - "-brokers=kafka:9092"
+      - "-redis-url=redis:6379"
+      - "-consul-url=consul:8500"
+    depends_on:
+      - kafka
+      - consul
+    restart: on-failure
+  kafkagate:
+    build:
+      context: ./kafkagate
+      dockerfile: ../Dockerfile
+    command: 
+      - "-brokers=kafka:9092"
+    depends_on:
+      - kafka
+    restart: on-failure
+    ports:
+      - 8000:8000
+  worker:
+    build:
+      context: ./worker
+      dockerfile: ../Dockerfile
+    command: 
+      - "-redis-url=redis:6379"
+    depends_on:
+      - redis
+    restart: on-failure
+  kafka:
+    image: docker.io/bitnami/kafka:3.5
+    volumes:
+      - "kafka_data:/bitnami"
+    environment:
+      # KRaft settings
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      # Listeners
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+  redis:
+    image: redis:alpine
+  consul:
+    image: hashicorp/consul
+    command:
+      - agent
+      - "-server"
+      - "-ui"
+      - "-node=server-1"
+      - "-bootstrap-expect=1"
+      - "-client=0.0.0.0"
+
+volumes:
+  kafka_data: {}

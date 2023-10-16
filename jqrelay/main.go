@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	TOPIC   = ""
-	PORT    = ""
-	BROKERS = ""
+	TOPIC      = ""
+	PORT       = ""
+	BROKERS    = ""
+	REDIS_URL  = ""
+	CONSUL_URL = ""
 )
 
 func init() {
@@ -27,13 +29,15 @@ func init() {
 	flag.StringVar(&BROKERS, "brokers", "localhost:9092", "comma seperated list of brokers to connect to")
 	flag.StringVar(&TASK_QUEUE, "task-queue", "task_queue", "the task queue")
 	flag.StringVar(&PROCESSING_QUEUE, "processing-queue", "processing_queue", "the processing queue")
+	flag.StringVar(&REDIS_URL, "redis-url", "localhost:6379", "the redis url")
+	flag.StringVar(&CONSUL_URL, "consul-url", "localhost:8500", "the consul url")
 
 	flag.Parse()
 }
 
 func main() {
 	keepRunning := true
-	JqRelayConfig = Config{Port: PORT, Kafka: KafkaConfig{Brokers: strings.Split(BROKERS, ","), Topic: TOPIC}}
+	JqRelayConfig = Config{Kafka: KafkaConfig{Brokers: strings.Split(BROKERS, ","), Topic: TOPIC}, Redis: RedisConfig{Url: REDIS_URL}, Consul: ConsulConfig{Url: CONSUL_URL}}
 	log.Println("Starting consumer for topic:", JqRelayConfig.Kafka.Topic)
 
 	// init consumer
@@ -45,7 +49,7 @@ func main() {
 	}
 
 	// init consul client
-	consulConfig := consulapi.Config{}
+	consulConfig := consulapi.Config{Address: JqRelayConfig.Consul.Url}
 	consulClient, err := consulapi.NewClient(&consulConfig)
 
 	ctx, cancel := context.WithCancel(context.Background())
