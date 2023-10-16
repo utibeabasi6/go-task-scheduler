@@ -53,10 +53,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				log.Println("Message channel was closed")
 				return nil
 			}
-			err := sendToRedis(rdb, string(msg.Value))
+			err := sendToRedis(rdb, string(msg.Value), TASK_QUEUE, PROCESSING_QUEUE)
 			if err != nil {
 				log.Println("Error sending message to redis", err)
 			} else {
+				// Mark the message as processed
 				session.MarkMessage(msg, "")
 			}
 

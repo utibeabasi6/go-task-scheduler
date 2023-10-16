@@ -16,17 +16,17 @@ import (
 )
 
 var (
-	VERSION = ""
 	TOPIC   = ""
 	PORT    = ""
 	BROKERS = ""
 )
 
 func init() {
-	flag.StringVar(&VERSION, "version", "0.11.0.0", "apache kafka version")
 	flag.StringVar(&TOPIC, "topic", "task", "the topic to send messages to")
 	flag.StringVar(&PORT, "port", "8000", "the port to start the server on")
 	flag.StringVar(&BROKERS, "brokers", "localhost:9092", "comma seperated list of brokers to connect to")
+	flag.StringVar(&TASK_QUEUE, "task-queue", "task_queue", "the task queue")
+	flag.StringVar(&PROCESSING_QUEUE, "processing-queue", "processing_queue", "the processing queue")
 
 	flag.Parse()
 }
@@ -54,6 +54,7 @@ func main() {
 
 	go func() {
 		defer wg.Done()
+		// Attempt to acquire consul lock
 		log.Println("Acquiring consul lock...")
 		lock, err := consulClient.LockKey(JqRelayConfig.Kafka.Topic)
 		if err != nil {
@@ -69,6 +70,7 @@ func main() {
 				log.Fatalln("Error occured while releasing lock", err)
 			}
 		}()
+		// Process messages
 		for {
 			if err := cg.Consume(ctx, strings.Split(JqRelayConfig.Kafka.Topic, ","), &consumer); err != nil {
 				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
