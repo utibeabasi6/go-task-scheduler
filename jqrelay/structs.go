@@ -4,7 +4,12 @@ import (
 	"log"
 
 	"github.com/IBM/sarama"
+	"github.com/redis/go-redis/v9"
 )
+
+type RedisConfig struct {
+	Url string `json:"url"`
+}
 
 type KafkaConfig struct {
 	Brokers []string `json:"brokers"`
@@ -13,6 +18,7 @@ type KafkaConfig struct {
 type Config struct {
 	Port  string      `json:"port"`
 	Kafka KafkaConfig `json:"kafkaConfig"`
+	Redis RedisConfig `json:"redisConfig"`
 }
 
 type Job struct {
@@ -35,6 +41,11 @@ func (c *Consumer) Cleanup(session sarama.ConsumerGroupSession) error {
 }
 
 func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     JqRelayConfig.Redis.Url,
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
 	for {
 		select {
 		case msg, ok := <-claim.Messages():
@@ -42,8 +53,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				log.Println("Message channel was closed")
 				return nil
 			}
-			log.Println("consumed message", string(msg.Value))
-			session.MarkMessage(msg, "")
+			err := sendToRedis(rdb, string(msg.Value))
+			if err != nil {
+				log.Println("Error sending message to redis", err)
+			} else {
+				session.MarkMessage(msg, "")
+			}
+
 		case <-session.Context().Done():
 			return nil
 		}

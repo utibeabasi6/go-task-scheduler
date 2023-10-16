@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/IBM/sarama"
+	consulapi "github.com/hashicorp/consul/api"
 )
 
 var (
@@ -32,17 +33,20 @@ func init() {
 
 func main() {
 	keepRunning := true
-	var config Config = Config{Port: PORT, Kafka: KafkaConfig{Brokers: strings.Split(BROKERS, ","), Topic: TOPIC}}
-
-	log.Println("Starting consumer for topic:", config.Kafka.Topic)
+	JqRelayConfig = Config{Port: PORT, Kafka: KafkaConfig{Brokers: strings.Split(BROKERS, ","), Topic: TOPIC}}
+	log.Println("Starting consumer for topic:", JqRelayConfig.Kafka.Topic)
 
 	// init consumer
 	consumerConfig := sarama.NewConfig()
 	consumer := Consumer{ready: make(chan bool, 1)}
-	cg, err := sarama.NewConsumerGroup(config.Kafka.Brokers, "taskProcessors", consumerConfig)
+	cg, err := sarama.NewConsumerGroup(JqRelayConfig.Kafka.Brokers, "taskProcessors", consumerConfig)
 	if err != nil {
 		log.Fatalln("Error creating consumer group", err)
 	}
+
+	// init consul client
+	consulConfig := consulapi.Config{}
+	consulClient, err := consulapi.NewClient(&consulConfig)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := sync.WaitGroup{}
@@ -50,8 +54,23 @@ func main() {
 
 	go func() {
 		defer wg.Done()
+		log.Println("Acquiring consul lock...")
+		lock, err := consulClient.LockKey(JqRelayConfig.Kafka.Topic)
+		if err != nil {
+			log.Fatalln("Unable to creating lock key", err)
+		}
+		lockChan, err := lock.Lock(nil)
+		if err != nil {
+			log.Fatalln("Unable to creating acquiring lock", err)
+		}
+		defer func() {
+			log.Println("Releasing consul lock...")
+			if err := lock.Unlock(); err != nil {
+				log.Fatalln("Error occured while releasing lock", err)
+			}
+		}()
 		for {
-			if err := cg.Consume(ctx, strings.Split(config.Kafka.Topic, ","), &consumer); err != nil {
+			if err := cg.Consume(ctx, strings.Split(JqRelayConfig.Kafka.Topic, ","), &consumer); err != nil {
 				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 					return
 				}
@@ -61,6 +80,11 @@ func main() {
 				return
 			}
 			consumer.ready = make(chan bool)
+			select {
+			case <-lockChan:
+				log.Println("Consul lock lost prematurely")
+				cancel()
+			}
 		}
 	}()
 
